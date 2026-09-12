@@ -30,16 +30,28 @@ object SamsungKeystoreHooks : YukiBaseHooker() {
         YLog.debug(msg = "$TAG: onHook: loaded.")
 
         /* Bypass SAK integrity check */
-        "com.samsung.android.security.keystore.AttestParameterSpec".toClassOrNull()?.resolve()?.apply {
-            firstMethod {
-                name = "isVerifiableIntegrity"
-                emptyParameters()
-                returnType = Boolean::class
-            }.hook {
-                replaceToTrue()
-            }
-        } ?: YLog.error(msg = "$TAG: couldn't access class " +
-                "com.samsung.android.security.keystore.AttestParameterSpec")
+        val attestParameterSpec =
+            "com.samsung.android.security.keystore.AttestParameterSpec".toClassOrNull()
+        if (attestParameterSpec == null) {
+            YLog.error(msg = "$TAG: couldn't access class " +
+                    "com.samsung.android.security.keystore.AttestParameterSpec")
+            return
+        }
+
+        val isVerifiableIntegrity = attestParameterSpec.resolve().firstMethodOrNull {
+            name = "isVerifiableIntegrity"
+            emptyParameters()
+            returnType = Boolean::class
+        }
+        if (isVerifiableIntegrity == null) {
+            YLog.error(msg = "$TAG: couldn't access method " +
+                    "AttestParameterSpec.isVerifiableIntegrity()")
+            return
+        }
+
+        isVerifiableIntegrity.hook {
+            replaceToTrue()
+        }
     }
 
 }
