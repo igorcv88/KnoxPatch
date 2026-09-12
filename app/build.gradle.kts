@@ -9,6 +9,8 @@ val releaseStoreFile = rootProject.findProperty("releaseStoreFile") as? String
 val releaseStorePassword = rootProject.findProperty("releaseStorePassword") as? String
 val releaseKeyAlias = rootProject.findProperty("releaseKeyAlias") as? String
 val releaseKeyPassword = rootProject.findProperty("releaseKeyPassword") as? String
+val releaseVersionCode = (rootProject.findProperty("releaseVersionCode") as? String)?.toIntOrNull()
+val releaseVersionName = rootProject.findProperty("releaseVersionName") as? String
 
 android {
     namespace = "io.mesalabs.knoxpatch"
@@ -23,8 +25,8 @@ android {
         applicationId = "io.mesalabs.knoxpatch"
         minSdk = 28
         targetSdk = 36
-        versionCode = Config.versionCode
-        versionName = Config.versionName
+        versionCode = releaseVersionCode ?: Config.versionCode
+        versionName = releaseVersionName ?: Config.versionName
     }
 
     lint {

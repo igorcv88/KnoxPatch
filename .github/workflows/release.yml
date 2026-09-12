@@ -1,0 +1,207 @@
+name: Build APK Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: knoxpatch-release
+  cancel-in-progress: false
+
+env:
+  RELEASE_SERIES: "0.8"
+  RELEASE_PATCH_FLOOR: "3"
+
+jobs:
+  release:
+    name: Build, sign and publish APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Confirm main branch
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Run this workflow from the main branch." >&2
+            exit 1
+          fi
+
+      - name: Select next version
+        run: |
+          set -euo pipefail
+          git fetch --force --tags origin
+          SERIES_PATTERN="${RELEASE_SERIES//./\.}"
+          LAST_PATCH="$(
+            git tag --list "v${RELEASE_SERIES}.*" \
+              | sed -nE "s/^v${SERIES_PATTERN}\.([0-9]+)$/\1/p" \
+              | sort -n \
+              | tail -n 1
+          )"
+          LAST_PATCH="${LAST_PATCH:-$RELEASE_PATCH_FLOOR}"
+          if (( LAST_PATCH < RELEASE_PATCH_FLOOR )); then
+            LAST_PATCH="$RELEASE_PATCH_FLOOR"
+          fi
+
+          PATCH=$((LAST_PATCH + 1))
+          VERSION_NAME="${RELEASE_SERIES}.${PATCH}"
+          VERSION_CODE=$((8000 + PATCH))
+          RELEASE_TAG="v${VERSION_NAME}"
+
+          if git rev-parse -q --verify "refs/tags/${RELEASE_TAG}" >/dev/null; then
+            echo "Tag ${RELEASE_TAG} already exists." >&2
+            exit 1
+          fi
+
+          {
+            echo "VERSION_NAME=$VERSION_NAME"
+            echo "VERSION_CODE=$VERSION_CODE"
+            echo "RELEASE_TAG=$RELEASE_TAG"
+          } >> "$GITHUB_ENV"
+
+      - name: Reserve release tag
+        run: |
+          set -euo pipefail
+          git tag "$RELEASE_TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/${RELEASE_TAG}"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle cache
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Prepare GitHub Packages credentials
+        env:
+          GPR_USER: ${{ secrets.GPR_USER }}
+          GPR_KEY: ${{ secrets.GPR_KEY }}
+        run: |
+          set -euo pipefail
+          for name in GPR_USER GPR_KEY; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Required secret is missing: $name" >&2
+              exit 1
+            fi
+          done
+          {
+            printf "gpr.user=%s\n" "$GPR_USER"
+            printf "gpr.key=%s\n" "$GPR_KEY"
+          } >> gradle.properties
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for name in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Required secret is missing: $name" >&2
+              exit 1
+            fi
+          done
+
+          printf '%s' "$KEYSTORE_BASE64" | tr -d '\r\n ' | base64 --decode > release.keystore
+          chmod 600 release.keystore
+          keytool -list \
+            -keystore release.keystore \
+            -storepass "$STORE_PASSWORD" \
+            -alias "$KEY_ALIAS" >/dev/null
+
+          {
+            printf "releaseStoreFile=release.keystore\n"
+            printf "releaseStorePassword=%s\n" "$STORE_PASSWORD"
+            printf "releaseKeyAlias=%s\n" "$KEY_ALIAS"
+            printf "releaseKeyPassword=%s\n" "$KEY_PASSWORD"
+          } >> gradle.properties
+
+      - name: Build release APKs
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --build-cache \
+            :app:assembleRelease \
+            -PreleaseVersionCode="$VERSION_CODE" \
+            -PreleaseVersionName="$VERSION_NAME" \
+            --no-daemon
+
+      - name: Verify and prepare release assets
+        run: |
+          set -euo pipefail
+
+          BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          BASIC_APK="$(find app/build/outputs/apk/sepBasic/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+          LITE_APK="$(find app/build/outputs/apk/sepLite/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
+
+          test -n "$BASIC_APK"
+          test -n "$LITE_APK"
+          test -f "$BASIC_APK"
+          test -f "$LITE_APK"
+
+          BASIC_ASSET="KnoxPatch-v${VERSION_NAME}.apk"
+          LITE_ASSET="KnoxPatch-v${VERSION_NAME}-sep-lite.apk"
+          cp "$BASIC_APK" "$BASIC_ASSET"
+          cp "$LITE_APK" "$LITE_ASSET"
+
+          for apk in "$BASIC_ASSET" "$LITE_ASSET"; do
+            "$BUILD_TOOLS_DIR/zipalign" -c -P 16 4 "$apk"
+            "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$apk"
+            BADGING="$($BUILD_TOOLS_DIR/aapt dump badging "$apk" | head -n 1)"
+            grep -F "package: name='io.mesalabs.knoxpatch'" <<< "$BADGING"
+            grep -F "versionCode='${VERSION_CODE}'" <<< "$BADGING"
+            grep -F "versionName='${VERSION_NAME}'" <<< "$BADGING"
+            sha256sum "$apk" > "${apk}.sha256"
+          done
+
+          {
+            echo "BASIC_ASSET=$BASIC_ASSET"
+            echo "LITE_ASSET=$LITE_ASSET"
+          } >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            "$BASIC_ASSET" \
+            "${BASIC_ASSET}.sha256" \
+            "$LITE_ASSET" \
+            "${LITE_ASSET}.sha256" \
+            --verify-tag \
+            --title "KnoxPatch ${VERSION_NAME}" \
+            --generate-notes \
+            --latest
+
+      - name: Remove reserved tag if publication fails
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${RELEASE_TAG:-}" ]]; then
+            exit 0
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Release already exists; preserving ${RELEASE_TAG}."
+            exit 0
+          fi
+          git push origin ":refs/tags/${RELEASE_TAG}" || true
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          rm -f release.keystore
+          sed -i '/^releaseStoreFile=/d;/^releaseStorePassword=/d;/^releaseKeyAlias=/d;/^releaseKeyPassword=/d;/^gpr.user=/d;/^gpr.key=/d' gradle.properties || true
