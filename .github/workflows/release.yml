@@ -13,10 +13,11 @@ concurrency:
 env:
   RELEASE_SERIES: "0.8"
   RELEASE_PATCH_FLOOR: "3"
+  ENHANCER_VERSION: "0.5"
 
 jobs:
   release:
-    name: Build, sign and publish APKs
+    name: Build, sign and publish APKs and Enhancer
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -137,7 +138,7 @@ jobs:
             -PreleaseVersionName="$VERSION_NAME" \
             --no-daemon
 
-      - name: Verify and prepare release assets
+      - name: Verify and prepare APK assets
         run: |
           set -euo pipefail
 
@@ -170,6 +171,34 @@ jobs:
             echo "LITE_ASSET=$LITE_ASSET"
           } >> "$GITHUB_ENV"
 
+      - name: Build KnoxPatch Enhancer
+        run: |
+          set -euo pipefail
+          ENHANCER_ASSET="KnoxPatch-Enhancer-v${ENHANCER_VERSION}.zip"
+
+          rm -f enhancer/*.sha256
+          while IFS= read -r -d '' file; do
+            case "$file" in
+              *.gitignore|*.sha256|*.md|*.json) continue ;;
+            esac
+            printf '%s' "$(sha256sum "$file" | awk '{print $1}')" > "${file}.sha256"
+          done < <(find enhancer -type f -print0)
+
+          (
+            cd enhancer
+            zip -r "../$ENHANCER_ASSET" . \
+              -x '*.gitignore' \
+              -x '*.json' \
+              -x '*.md'
+          )
+
+          test -s "$ENHANCER_ASSET"
+          unzip -t "$ENHANCER_ASSET"
+          unzip -p "$ENHANCER_ASSET" module.prop | grep -F "version=v${ENHANCER_VERSION}"
+          unzip -p "$ENHANCER_ASSET" module.prop | grep -F 'id=kp_enhancer'
+          sha256sum "$ENHANCER_ASSET" > "${ENHANCER_ASSET}.sha256"
+          echo "ENHANCER_ASSET=$ENHANCER_ASSET" >> "$GITHUB_ENV"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -180,8 +209,10 @@ jobs:
             "${BASIC_ASSET}.sha256" \
             "$LITE_ASSET" \
             "${LITE_ASSET}.sha256" \
+            "$ENHANCER_ASSET" \
+            "${ENHANCER_ASSET}.sha256" \
             --verify-tag \
-            --title "KnoxPatch ${VERSION_NAME}" \
+            --title "KnoxPatch ${VERSION_NAME} (Enhancer v${ENHANCER_VERSION})" \
             --generate-notes \
             --latest
 
@@ -204,4 +235,5 @@ jobs:
         if: always()
         run: |
           rm -f release.keystore
+          find enhancer -type f -name '*.sha256' -delete || true
           sed -i '/^releaseStoreFile=/d;/^releaseStorePassword=/d;/^releaseKeyAlias=/d;/^releaseKeyPassword=/d;/^gpr.user=/d;/^gpr.key=/d' gradle.properties || true
