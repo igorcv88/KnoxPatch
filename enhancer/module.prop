@@ -1,7 +1,7 @@
 id=kp_enhancer
 name=KnoxPatch Enhancer
-version=v0.4
-versionCode=4
-author=salvogiangri
+version=v0.5
+versionCode=5
+author=salvogiangri / igorcv88
 description=Get Samsung apps/features working again in your rooted Galaxy device.
-updateJson=https://raw.githubusercontent.com/salvogiangri/KnoxPatch/main/enhancer/update.json
+updateJson=https://raw.githubusercontent.com/igorcv88/KnoxPatch/main/enhancer/update.json
