@@ -70,15 +70,18 @@ object SystemHooks : YukiBaseHooker()  {
     private fun applySAKHooks() {
         if (Build.VERSION.SDK_INT >= 35) {
             safeHook("AttestationUtils.generateKeyPair") {
+                val attestParameterSpecClass =
+                    "com.samsung.android.security.keystore.AttestParameterSpec".toClass()
+
                 "com.samsung.android.security.keystore.AttestationUtils".toClass().resolve()
                     .firstMethod {
                         name = "generateKeyPair"
-                        parameterCount = 1
+                        parameters(attestParameterSpecClass)
                         returnType = KeyPair::class
                     }.hook {
                         before {
                             safeHook("AttestParameterSpec.mVerifiableIntegrity") {
-                                "com.samsung.android.security.keystore.AttestParameterSpec".toClass().resolve()
+                                attestParameterSpecClass.resolve()
                                     .firstField {
                                         name = "mVerifiableIntegrity"
                                         type = Boolean::class
