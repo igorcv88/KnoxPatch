@@ -64,101 +64,126 @@ object RootDetectionHooks : YukiBaseHooker() {
 
         /* Spoof root checks */
         if (Build.TYPE != "user") {
-            Build::class.resolve()
-                .firstField {
-                    name = "TYPE"
-                    type = String::class
-                }.set("user")
+            safeHook("Build.TYPE") {
+                Build::class.resolve()
+                    .firstField {
+                        name = "TYPE"
+                        type = String::class
+                    }.set("user")
+            }
         }
 
         if (Build.TAGS != "release-keys") {
-            Build::class.resolve()
-                .firstField {
-                    name = "TAGS"
-                    type = String::class
-                }.set("release-keys")
-        }
-
-        File::class.resolve().apply {
-            firstConstructor {
-                parameters(String::class)
-            }.hook {
-                before {
-                    val pathname: String = args(0).string()
-
-                    if (pathname.endsWith("su") || pathname.contains("Superuser.apk")) {
-                        args(0).set("/system/xbin/fakefile")
-                    }
-                }
-            }
-
-            firstConstructor {
-                parameters(String::class, String::class)
-            }.hook {
-                before {
-                    val child: String = args(1).string()
-
-                    if (child == "su" || child == "busybox") {
-                        args(1).set("fakebin")
-                    }
-                }
-            }
-
-            firstMethod {
-                name = "canWrite"
-                emptyParameters()
-                returnType = Boolean::class
-            }.hook {
-                replaceToFalse()
+            safeHook("Build.TAGS") {
+                Build::class.resolve()
+                    .firstField {
+                        name = "TAGS"
+                        type = String::class
+                    }.set("release-keys")
             }
         }
 
-        Runtime::class.resolve().apply {
-            firstMethod {
-                name = "exec"
-                parameters(String::class)
-            }.hook {
-                before {
-                    val command: String = args(0).string()
+        safeHook("File(String)") {
+            File::class.resolve()
+                .firstConstructor {
+                    parameters(String::class)
+                }.hook {
+                    before {
+                        val pathname: String = args(0).string()
 
-                    if (command == "su") {
-                        IOException().throwToApp()
+                        if (pathname.endsWith("su") || pathname.contains("Superuser.apk")) {
+                            args(0).set("/system/xbin/fakefile")
+                        }
                     }
                 }
-            }
+        }
 
-            firstMethod {
-                name = "exec"
-                parameters(ArrayClass(String::class))
-            }.hook {
-                before {
-                    val cmdarray: Array<String> = args(0).array()
+        safeHook("File(String,String)") {
+            File::class.resolve()
+                .firstConstructor {
+                    parameters(String::class, String::class)
+                }.hook {
+                    before {
+                        val child: String = args(1).string()
 
-                    for (cmd in cmdarray) {
-                        if (cmd.endsWith("/which") || cmd == "su") {
+                        if (child == "su" || child == "busybox") {
+                            args(1).set("fakebin")
+                        }
+                    }
+                }
+        }
+
+        safeHook("File.canWrite") {
+            File::class.resolve()
+                .firstMethod {
+                    name = "canWrite"
+                    emptyParameters()
+                    returnType = Boolean::class
+                }.hook {
+                    replaceToFalse()
+                }
+        }
+
+        safeHook("Runtime.exec(String)") {
+            Runtime::class.resolve()
+                .firstMethod {
+                    name = "exec"
+                    parameters(String::class)
+                }.hook {
+                    before {
+                        val command: String = args(0).string()
+
+                        if (command == "su") {
                             IOException().throwToApp()
                         }
                     }
                 }
-            }
         }
 
-        "android.app.ApplicationPackageManager".toClass().resolve()
-            .firstMethod {
-                name = "getPackageInfo"
-                parameters(String::class, Int::class)
-            }.hook {
-                before {
-                    val packageName: String = args(0).string()
+        safeHook("Runtime.exec(String[])") {
+            Runtime::class.resolve()
+                .firstMethod {
+                    name = "exec"
+                    parameters(ArrayClass(String::class))
+                }.hook {
+                    before {
+                        val cmdarray: Array<String> = args(0).array()
 
-                    for (cmd in rootPackages) {
-                        if (packageName == cmd) {
-                            args(0).set("io.fake.pkg")
-                            break
+                        for (cmd in cmdarray) {
+                            if (cmd.endsWith("/which") || cmd == "su") {
+                                IOException().throwToApp()
+                            }
                         }
                     }
                 }
-            }
+        }
+
+        safeHook("ApplicationPackageManager.getPackageInfo") {
+            "android.app.ApplicationPackageManager".toClass().resolve()
+                .firstMethod {
+                    name = "getPackageInfo"
+                    parameters(String::class, Int::class)
+                }.hook {
+                    before {
+                        val packageName: String = args(0).string()
+
+                        for (cmd in rootPackages) {
+                            if (packageName == cmd) {
+                                args(0).set("io.fake.pkg")
+                                break
+                            }
+                        }
+                    }
+                }
+        }
+    }
+
+    private fun safeHook(name: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            YLog.error(msg = "$TAG: $name hook setup skipped: $t")
+        }
     }
 
 }
