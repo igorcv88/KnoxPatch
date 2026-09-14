@@ -30,21 +30,25 @@ object SAKDisableHooks : YukiBaseHooker() {
         YLog.debug(msg = "$TAG: onHook: loaded.")
 
         /* Disable SAK support */
-        "android.os.SemSystemProperties".toClass().resolve()
-            .firstMethod {
-                name = "get"
-                parameters(String::class, String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
-                    val def: String = args(1).string()
+        try {
+            "android.os.SemSystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class, String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
+                        val def: String = args(1).string()
 
-                    if (key == "ro.security.keystore.keytype") {
-                        result = def
+                        if (key == "ro.security.keystore.keytype") {
+                            result = def
+                        }
                     }
                 }
-            }
+        } catch (t: Throwable) {
+            YLog.error(msg = "$TAG: SemSystemProperties hook setup skipped: $t")
+        }
     }
 
 }

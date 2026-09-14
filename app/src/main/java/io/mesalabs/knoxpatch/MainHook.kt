@@ -62,7 +62,7 @@ object MainHook : IYukiHookXposedInit {
          * - Android 14 (One UI 6.x)
          * - Android 15 (One UI 7.x)
          * - Android 16 (One UI 8.x)
-         * - Android 17 (One UI 9.x; guarded compatibility hooks)
+         * - Android 17 (One UI 9.x)
          */
         when {
             sepVersion == -1 -> {
@@ -80,24 +80,8 @@ object MainHook : IYukiHookXposedInit {
             }
         }
 
-        /*
-         * One UI 9 / Android 17 compatibility is intentionally limited to the
-         * Samsung Account / Knox Matrix path until system_server hooks are
-         * validated against the new framework. This avoids loading legacy
-         * SystemHooks on an unvalidated Android release while still fixing the
-         * Knox Matrix tamper state that can force Samsung Account sign-outs.
-         */
         if (sepVersion >= Constants.ONEUI_9_0) {
-            YLog.debug(msg = "$TAG: onHook: loading guarded One UI 9 compatibility hooks.")
-
-            loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks)
-            loadApp(Constants.SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks)
-            loadApp(Constants.SAMSUNG_CLOUD_PACKAGE_NAME, SamsungKeystoreHooks)
-            loadApp(Constants.QUICK_SHARE_PACKAGE_NAME, SamsungKeystoreHooks)
-            loadApp(Constants.SAMSUNG_CLOUD_PLATFORM_MANAGER_PACKAGE_NAME, SamsungKeystoreHooks)
-
-            loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks)
-            return@encase
+            YLog.debug(msg = "$TAG: onHook: loading full One UI 9 compatibility hook set.")
         }
 
         loadSystem(SystemHooks)

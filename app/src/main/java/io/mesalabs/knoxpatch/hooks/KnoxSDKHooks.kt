@@ -30,14 +30,18 @@ object KnoxSDKHooks : YukiBaseHooker() {
         YLog.debug(msg = "$TAG: onHook: loaded.")
 
         /* Disable Knox support */
-        "com.samsung.android.knox.EnterpriseDeviceManager".toClass().resolve()
-            .firstMethod {
-                name = "getAPILevel"
-                emptyParameters()
-                returnType = Int::class
-            }.hook {
-                replaceTo(-1)
-            }
+        try {
+            "com.samsung.android.knox.EnterpriseDeviceManager".toClass().resolve()
+                .firstMethod {
+                    name = "getAPILevel"
+                    emptyParameters()
+                    returnType = Int::class
+                }.hook {
+                    replaceTo(-1)
+                }
+        } catch (t: Throwable) {
+            YLog.error(msg = "$TAG: EnterpriseDeviceManager.getAPILevel hook setup skipped: $t")
+        }
     }
 
 }
