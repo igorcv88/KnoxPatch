@@ -32,74 +32,90 @@ object PropSpoofHooks : YukiBaseHooker() {
         YLog.debug(msg = "$TAG: onHook: loaded.")
 
         /* Spoof critical system props */
-        ProcessBuilder::class.resolve()
-            .firstConstructor {
-                parameters(ArrayClass(String::class))
-            }.hook {
-                before {
-                    val cmdarray: Array<String> = args(0).array()
+        safeHook("ProcessBuilder") {
+            ProcessBuilder::class.resolve()
+                .firstConstructor {
+                    parameters(ArrayClass(String::class))
+                }.hook {
+                    before {
+                        val cmdarray: Array<String> = args(0).array()
 
-                    // Fix SPCMAgent (SAK)
-                    if (cmdarray.size == 2 && cmdarray[0] == "/system/bin/getprop") {
-                        when (cmdarray[1]) {
-                            "ro.build.type" -> args(0).set(
-                                arrayOf("/system/bin/echo", "eng"))
+                        // Fix SPCMAgent (SAK)
+                        if (cmdarray.size == 2 && cmdarray[0] == "/system/bin/getprop") {
+                            when (cmdarray[1]) {
+                                "ro.build.type" -> args(0).set(
+                                    arrayOf("/system/bin/echo", "eng"))
+                            }
                         }
                     }
                 }
-            }
+        }
 
-        "android.os.SystemProperties".toClass().resolve()
-            .firstMethod {
-                name = "get"
-                parameters(String::class, String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
+        safeHook("SystemProperties.get") {
+            "android.os.SystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class, String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
 
-                    // Fix SPCMAgent (SAK)
-                    if (key == "ro.build.type") {
-                        result = "eng"
+                        // Fix SPCMAgent (SAK)
+                        if (key == "ro.build.type") {
+                            result = "eng"
+                        }
                     }
                 }
-            }
+        }
 
-        "android.os.SemSystemProperties".toClass().resolve().apply {
-            firstMethod {
-                name = "get"
-                parameters(String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
+        safeHook("SemSystemProperties.get(String)") {
+            "android.os.SemSystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
 
-                    // Fixes:
-                    // - Legacy Secure Wi-Fi (ICD)
-                    // - SPCMAgent (SAK)
-                    if (key == "ro.build.type") {
-                        result = "eng"
+                        // Fixes:
+                        // - Legacy Secure Wi-Fi (ICD)
+                        // - SPCMAgent (SAK)
+                        if (key == "ro.build.type") {
+                            result = "eng"
+                        }
                     }
                 }
-            }
+        }
 
-            firstMethod {
-                name = "get"
-                parameters(String::class, String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
-                    val def: String = args(1).string()
+        safeHook("SemSystemProperties.get(String,String)") {
+            "android.os.SemSystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class, String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
+                        val def: String = args(1).string()
 
-                    when (key) {
-                        "ro.boot.flash.locked" -> result = "1"
-                        "ro.boot.verifiedbootstate" -> result = "green"
-                        "ro.boot.warranty_bit" -> result = "0"
-                        "ro.config.iccc_version" -> result = def
+                        when (key) {
+                            "ro.boot.flash.locked" -> result = "1"
+                            "ro.boot.verifiedbootstate" -> result = "green"
+                            "ro.boot.warranty_bit" -> result = "0"
+                            "ro.config.iccc_version" -> result = def
+                        }
                     }
                 }
-            }
+        }
+    }
+
+    private fun safeHook(name: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            YLog.error(msg = "$TAG: $name hook setup skipped: $t")
         }
     }
 
