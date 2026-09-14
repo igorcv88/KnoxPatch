@@ -47,95 +47,119 @@ object SystemHooks : YukiBaseHooker()  {
         /* Fix Secure Folder/Work profile */
         val sepVersion: Int = BuildUtils.getSEPVersion()
         if (sepVersion >= Constants.ONEUI_3_0) {
-            applySAKHooks()
+            safeHook("SAK") { applySAKHooks() }
         } else if (sepVersion >= Constants.ONEUI_1_0) {
-            applyTIMAHooks()
+            safeHook("TIMA") { applyTIMAHooks() }
         }
 
         /* Disable KnoxGuard support */
-        applyKGHooks()
+        safeHook("KnoxGuard") { applyKGHooks() }
 
         /* Disable ASKS */
-        applySPHooks()
+        safeHook("ASKS") { applySPHooks() }
+    }
+
+    private fun safeHook(name: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (t: Throwable) {
+            YLog.error(msg = "$TAG: $name hook setup skipped: $t")
+        }
     }
 
     private fun applySAKHooks() {
         if (Build.VERSION.SDK_INT >= 35) {
-            "com.samsung.android.security.keystore.AttestationUtils".toClass().resolve()
-                .firstMethod {
-                    name = "generateKeyPair"
-                    parameterCount = 1
-                    returnType = KeyPair::class
-                }.hook {
-                    before {
-                        "com.samsung.android.security.keystore.AttestParameterSpec".toClass().resolve()
-                            .firstField {
-                                name = "mVerifiableIntegrity"
-                                type = Boolean::class
-                            }.of(args(0).cast()).set(true)
+            safeHook("AttestationUtils.generateKeyPair") {
+                "com.samsung.android.security.keystore.AttestationUtils".toClass().resolve()
+                    .firstMethod {
+                        name = "generateKeyPair"
+                        parameterCount = 1
+                        returnType = KeyPair::class
+                    }.hook {
+                        before {
+                            safeHook("AttestParameterSpec.mVerifiableIntegrity") {
+                                "com.samsung.android.security.keystore.AttestParameterSpec".toClass().resolve()
+                                    .firstField {
+                                        name = "mVerifiableIntegrity"
+                                        type = Boolean::class
+                                    }.of(args(0).cast()).set(true)
+                            }
+                        }
                     }
-                }
+            }
         }
 
         if (Build.VERSION.SDK_INT >= 31) {
-            "com.android.server.knox.dar.DarManagerService".toClass().resolve().apply {
-                firstMethod {
-                    name = "checkDeviceIntegrity"
-                    parameters(ArrayClass(Certificate::class))
-                    returnType = Boolean::class
-                }.hook {
-                    replaceToTrue()
-                }
+            safeHook("DarManagerService.checkDeviceIntegrity") {
+                "com.android.server.knox.dar.DarManagerService".toClass().resolve()
+                    .firstMethod {
+                        name = "checkDeviceIntegrity"
+                        parameters(ArrayClass(Certificate::class))
+                        returnType = Boolean::class
+                    }.hook {
+                        replaceToTrue()
+                    }
+            }
 
-                firstMethod {
-                    name = "isDeviceRootKeyInstalled"
-                    emptyParameters()
-                    returnType = Boolean::class
-                }.hook {
-                    replaceToTrue()
-                }
+            safeHook("DarManagerService.isDeviceRootKeyInstalled") {
+                "com.android.server.knox.dar.DarManagerService".toClass().resolve()
+                    .firstMethod {
+                        name = "isDeviceRootKeyInstalled"
+                        emptyParameters()
+                        returnType = Boolean::class
+                    }.hook {
+                        replaceToTrue()
+                    }
             }
         } else {
-            "com.android.server.pm.PersonaManagerService".toClass().resolve()
-                .firstMethod {
-                    name = "isKnoxKeyInstallable"
-                    emptyParameters()
-                    returnType = Boolean::class
-                }.hook {
-                    replaceToTrue()
-                }
+            safeHook("PersonaManagerService.isKnoxKeyInstallable") {
+                "com.android.server.pm.PersonaManagerService".toClass().resolve()
+                    .firstMethod {
+                        name = "isKnoxKeyInstallable"
+                        emptyParameters()
+                        returnType = Boolean::class
+                    }.hook {
+                        replaceToTrue()
+                    }
+            }
         }
     }
 
     private fun applyTIMAHooks() {
-        "com.android.server.pm.PersonaServiceHelper".toClass().resolve()
-            .firstMethod {
-                name = "isTimaAvailable"
-                parameters(Context::class)
-                returnType = Boolean::class
-            }.hook {
-                replaceToTrue()
-            }
-
-        if (Build.VERSION.SDK_INT >= 29) {
-            "com.android.server.SdpManagerService\$LocalService".toClass().resolve()
+        safeHook("PersonaServiceHelper.isTimaAvailable") {
+            "com.android.server.pm.PersonaServiceHelper".toClass().resolve()
                 .firstMethod {
-                    name = "isKnoxKeyInstallable"
-                    emptyParameters()
+                    name = "isTimaAvailable"
+                    parameters(Context::class)
                     returnType = Boolean::class
                 }.hook {
                     replaceToTrue()
                 }
         }
 
-        "com.android.server.locksettings.SyntheticPasswordManager".toClass().resolve()
-            .firstMethod {
-                name = "isUnifiedKeyStoreSupported"
-                emptyParameters()
-                returnType = Boolean::class
-            }.hook {
-                replaceToTrue()
+        if (Build.VERSION.SDK_INT >= 29) {
+            safeHook("SdpManagerService.isKnoxKeyInstallable") {
+                "com.android.server.SdpManagerService\$LocalService".toClass().resolve()
+                    .firstMethod {
+                        name = "isKnoxKeyInstallable"
+                        emptyParameters()
+                        returnType = Boolean::class
+                    }.hook {
+                        replaceToTrue()
+                    }
             }
+        }
+
+        safeHook("SyntheticPasswordManager.isUnifiedKeyStoreSupported") {
+            "com.android.server.locksettings.SyntheticPasswordManager".toClass().resolve()
+                .firstMethod {
+                    name = "isUnifiedKeyStoreSupported"
+                    emptyParameters()
+                    returnType = Boolean::class
+                }.hook {
+                    replaceToTrue()
+                }
+        }
 
         findAndDeoptimizeMethod("com.android.server.locksettings.LockSettingsService",
             "verifyToken")
@@ -149,58 +173,66 @@ object SystemHooks : YukiBaseHooker()  {
 
     private fun applyKGHooks() {
         if (Build.VERSION.SDK_INT < 35) {
-            "com.samsung.android.knoxguard.service.KnoxGuardService".toClass().resolve()
-                .firstConstructor {
-                    parameters(Context::class)
-                }.hook {
-                    before {
-                        UnsupportedOperationException("KnoxGuard is unsupported").throwToApp()
+            safeHook("KnoxGuardService") {
+                "com.samsung.android.knoxguard.service.KnoxGuardService".toClass().resolve()
+                    .firstConstructor {
+                        parameters(Context::class)
+                    }.hook {
+                        before {
+                            UnsupportedOperationException("KnoxGuard is unsupported").throwToApp()
+                        }
                     }
-                }
+            }
         }
 
         if (Build.VERSION.SDK_INT >= 30) {
-            "com.samsung.android.knoxguard.service.KnoxGuardSeService".toClass().resolve()
-                .firstConstructor {
-                    parameters(Context::class)
-                }.hook {
-                    before {
-                        UnsupportedOperationException("KnoxGuard is unsupported").throwToApp()
+            safeHook("KnoxGuardSeService") {
+                "com.samsung.android.knoxguard.service.KnoxGuardSeService".toClass().resolve()
+                    .firstConstructor {
+                        parameters(Context::class)
+                    }.hook {
+                        before {
+                            UnsupportedOperationException("KnoxGuard is unsupported").throwToApp()
+                        }
                     }
-                }
+            }
         }
     }
 
     private fun applySPHooks() {
-        "android.os.SystemProperties".toClass().resolve().apply {
-            firstMethod {
-                name = "get"
-                parameters(String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
+        safeHook("SystemProperties.get(String)") {
+            "android.os.SystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
 
-                    if (key == "ro.build.official.release") {
-                        result = "false"
+                        if (key == "ro.build.official.release") {
+                            result = "false"
+                        }
                     }
                 }
-            }
+        }
 
-            firstMethod {
-                name = "get"
-                parameters(String::class, String::class)
-                returnType = String::class
-            }.hook {
-                before {
-                    val key: String = args(0).string()
-                    val def: String = args(1).string()
+        safeHook("SystemProperties.get(String,String)") {
+            "android.os.SystemProperties".toClass().resolve()
+                .firstMethod {
+                    name = "get"
+                    parameters(String::class, String::class)
+                    returnType = String::class
+                }.hook {
+                    before {
+                        val key: String = args(0).string()
+                        val def: String = args(1).string()
 
-                    if (key == "ro.build.official.release") {
-                        result = def
+                        if (key == "ro.build.official.release") {
+                            result = def
+                        }
                     }
                 }
-            }
         }
     }
 
