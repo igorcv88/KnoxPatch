@@ -1,0 +1,28 @@
+name: Review One UI 9 KnoxPatch minimal scope
+on:
+  pull_request:
+    paths:
+      - 'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt'
+      - 'app/src/main/res/values/arrays.xml'
+      - 'tests/test_oneui9_minimal_profile.py'
+      - '.github/workflows/validate-oneui9-minimal.yml'
+  push:
+    branches: [ main ]
+    paths:
+      - 'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt'
+      - 'app/src/main/res/values/arrays.xml'
+      - 'tests/test_oneui9_minimal_profile.py'
+      - '.github/workflows/validate-oneui9-minimal.yml'
+permissions:
+  contents: read
+jobs:
+  oneui9-minimal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Validate app-only One UI 9 hook profile and Xposed scope
+        run: python3 -m unittest discover -s tests -p 'test_oneui9_minimal_profile.py' -v
