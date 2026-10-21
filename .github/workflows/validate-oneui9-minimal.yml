@@ -4,6 +4,7 @@ on:
     paths:
       - 'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt'
       - 'app/src/main/res/values/arrays.xml'
+      - 'app/src/main/res/values-v*/arrays.xml'
       - 'tests/test_oneui9_minimal_profile.py'
       - '.github/workflows/validate-oneui9-minimal.yml'
   push:
@@ -11,6 +12,7 @@ on:
     paths:
       - 'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt'
       - 'app/src/main/res/values/arrays.xml'
+      - 'app/src/main/res/values-v*/arrays.xml'
       - 'tests/test_oneui9_minimal_profile.py'
       - '.github/workflows/validate-oneui9-minimal.yml'
 permissions:
