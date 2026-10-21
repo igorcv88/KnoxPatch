@@ -18,7 +18,7 @@ permissions:
 jobs:
   oneui9-minimal:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -40,8 +40,8 @@ jobs:
           test -n "$GPR_USER"
           test -n "$GPR_KEY"
           {
-            printf 'gpr.user=%s\\n' "$GPR_USER"
-            printf 'gpr.key=%s\\n' "$GPR_KEY"
+            printf 'gpr.user=%s\n' "$GPR_USER"
+            printf 'gpr.key=%s\n' "$GPR_KEY"
           } >> gradle.properties
       - name: Compile unsigned experimental release flavors
         run: |
