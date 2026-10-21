@@ -45,7 +45,29 @@ jobs:
             printf 'gpr.user=%s\n' "$GPR_USER"
             printf 'gpr.key=%s\n' "$GPR_KEY"
           } >> gradle.properties
-      - name: Compile unsigned experimental release flavors
+      - name: Compile experimental release flavors (test signing only)
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --build-cache
+      - name: Verify both experimental APK flavors
+        shell: bash
+        run: |
+          set -euo pipefail
+          basic="$(find app/build/outputs/apk/sepBasic/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          lite="$(find app/build/outputs/apk/sepLite/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+          test -s "$basic"
+          test -s "$lite"
+          build_tools="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
+          for apk in "$basic" "$lite"; do
+            "$build_tools/apksigner" verify --verbose "$apk"
+            sha256sum "$apk"
+          done
+      - name: Upload minimal One UI 9 APKs for hardware testing (not a release)
+        uses: actions/upload-artifact@v4
+        with:
+          name: KnoxPatch-OneUI9-Minimal-LAB-${{ github.sha }}
+          path: |
+            app/build/outputs/apk/sepBasic/release/*.apk
+            app/build/outputs/apk/sepLite/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
