@@ -1,97 +1,84 @@
-"""Contract tests for the minimal One UI 9 KnoxPatch LAB profile.
-
-Android resources use highest matching values-vN qualifiers; on API 37, a
-values-v34 array overrides an unqualified values/arrays.xml file.
-"""
+"""Source contracts. Compiled artifact verification is a separate mandatory CI gate."""
+import importlib.util
 import pathlib
 import re
 import unittest
 import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-MAIN = ROOT / "app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt"
-RES = ROOT / "app/src/main/res"
-
-EXPECTED = {
-    "com.samsung.android.kmxservice": "KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks",
-    "com.osp.app.signin": "SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks",
-    "com.samsung.android.app.sharelive": "QUICK_SHARE_PACKAGE_NAME, SamsungKeystoreHooks",
-    "com.sec.android.app.shealth": "SAMSUNG_HEALTH_PACKAGE_NAME, KnoxSDKHooks",
-}
+EXPECTED = {'com.samsung.android.kmxservice', 'com.osp.app.signin',
+            'com.samsung.android.app.sharelive', 'com.sec.android.app.shealth'}
 
 
-def effective_scope_for_sdk(sdk):
-    """Select the highest matching API-qualified arrays.xml from this source set."""
-    options = []
-    for path in RES.iterdir():
-        if not path.is_dir():
-            continue
-        qualifier = re.fullmatch(r"values(?:-v(\d+))?", path.name)
-        if not qualifier:
-            continue
-        min_api = int(qualifier.group(1)) if qualifier.group(1) else 0
-        file = path / "arrays.xml"
-        if file.is_file() and min_api <= sdk:
-            options.append((min_api, file))
-    if not options:
-        raise AssertionError(f"No scope resource for API {sdk}")
-    _, selected = max(options)
-    root = ET.parse(selected).getroot()
-    arrays = [e for e in root.findall("string-array") if e.attrib.get("name") == "scope"]
-    if len(arrays) != 1:
-        raise AssertionError(f"Expected exactly one scope resource in {selected}")
-    values = [e.text for e in arrays[0].findall("item")]
-    if len(values) != len(set(values)):
-        raise AssertionError(f"Duplicate package in {selected}")
-    return values, selected
+def scopes(profile, sdk):
+    candidates = {}
+    for source in ('main', profile):
+        for f in (ROOT / 'app/src' / source / 'res').glob('values*/arrays.xml'):
+            m = re.fullmatch(r'values(?:-v(\d+))?', f.parent.name)
+            if m and int(m[1] or 0) <= sdk:
+                candidates[int(m[1] or 0)] = f
+    f = candidates[max(candidates)]
+    return {e.text for e in ET.parse(f).findall("./string-array[@name='scope']/item")}
 
 
-class MinimalProfileContract(unittest.TestCase):
-    def test_oneui9_returns_before_systemserver_hooks(self):
-        src = MAIN.read_text(encoding="utf-8")
-        first = src.index("if (sepVersion >= Constants.ONEUI_9_0) {")
-        end = src.index("return@encase", first)
-        system_hook = src.index("loadSystem(SystemHooks)")
-        self.assertLess(first, end)
-        self.assertLess(end, system_hook)
-        minimal = src[first:end]
-        self.assertNotIn("loadSystem", minimal)
-        for target in EXPECTED.values():
-            self.assertIn("loadApp(Constants." + target + ")", minimal)
-        self.assertEqual(minimal.count("loadApp("), len(EXPECTED))
-        self.assertIn("loadSystem(SystemHooks)", src[end:])
-        self.assertIn("loadApp(Constants.SAMSUNG_HEALTH_MONITOR_PACKAGE_NAME, RootDetectionHooks)", src[end:])
+class Profiles(unittest.TestCase):
+    def test_minimal_never_inherits_full_resource_on_api37(self):
+        for sdk in (28,29,32,33,34,36,37,38,40):
+            self.assertEqual(EXPECTED, scopes('minimal', sdk))
 
-    def test_android17_resolves_exactly_four_app_scopes(self):
-        for sdk in (37, 38, 40):
-            with self.subTest(sdk=sdk):
-                values, selected = effective_scope_for_sdk(sdk)
-                self.assertEqual(RES / "values-v37" / "arrays.xml", selected)
-                self.assertEqual(set(EXPECTED), set(values))
-                self.assertEqual(len(EXPECTED), len(values))
-                self.assertNotIn("android", values)
-                self.assertFalse(any(v.startswith("com.google.") for v in values))
+    def test_full_preserves_qualified_scopes(self):
+        for sdk in (28,29,33,34,36,37,40):
+            scope = scopes('full', sdk)
+            self.assertIn('android', scope)
+            self.assertGreater(len(scope), 4)
+        self.assertIn('com.samsung.android.galaxycontinuity', scopes('full',37))
+        self.assertIn('com.samsung.android.scloud', scopes('full',37))
 
-    def test_older_android_keeps_upstream_qualified_scopes(self):
-        for sdk, expected_qualifier in [(28, "values"), (29, "values-v29"),
-                                         (32, "values-v29"), (33, "values-v33"),
-                                         (34, "values-v34"), (35, "values-v34"),
-                                         (36, "values-v34")]:
-            with self.subTest(sdk=sdk):
-                values, selected = effective_scope_for_sdk(sdk)
-                self.assertEqual(expected_qualifier, selected.parent.name)
-                self.assertIn("android", values)
-                self.assertGreater(len(values), len(EXPECTED))
+    def test_build_profiles_are_independent_of_sep_libraries(self):
+        s=(ROOT/'app/build.gradle.kts').read_text()
+        self.assertIn('listOf("sepCategory", "hookProfile")',s)
+        for value in ('true','false'):
+            self.assertIn(f'buildConfigField("boolean", "MINIMAL_PROFILE", "{value}")',s)
+        self.assertNotIn('applicationIdSuffix',s)
 
-    def test_all_scope_resources_are_well_formed(self):
-        for folder in RES.iterdir():
-            file = folder / "arrays.xml"
-            if folder.is_dir() and folder.name.startswith("values") and file.is_file():
-                with self.subTest(path=str(file)):
-                    items = ET.parse(file).findall("./string-array")
-                    self.assertEqual(1, len(items))
-                    self.assertEqual("scope", items[0].attrib.get("name"))
+    def test_minimal_dispatch_exits_before_system_and_full_keeps_original_calls(self):
+        s=(ROOT/'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt').read_text()
+        a=s.index('if (BuildConfig.MINIMAL_PROFILE)')
+        b=s.index('loadSystem(SystemHooks)')
+        branch=s[a:b]
+        self.assertIn('return@encase',branch)
+        self.assertEqual(4,branch.count('loadApp('))
+        self.assertNotIn('loadSystem(',branch)
+        self.assertNotIn('if (sepVersion >= Constants.ONEUI_9_0)', s)
+        self.assertIn('SAMSUNG_HEALTH_MONITOR_PACKAGE_NAME, RootDetectionHooks',s[b:])
+
+    def test_release_is_manual_two_sepBasic_assets(self):
+        s=(ROOT/'.github/workflows/release.yml').read_text()
+        self.assertIn('workflow_dispatch:',s)
+        self.assertNotIn('pull_request:',s)
+        self.assertNotIn('  push:',s)
+        self.assertIn(':app:assembleSepBasicFullRelease',s)
+        self.assertIn(':app:assembleSepBasicMinimalRelease',s)
+        self.assertNotIn('assembleRelease ',s)
+        self.assertNotIn('ENHANCER_ASSET',s)
+        self.assertNotIn('LITE_ASSET',s)
+        self.assertIn('"$ACTUAL_CERT" == "$EXPECTED_CERT"',s)
+        self.assertIn('verify_apk_profile.py',s)
+
+    def test_scope_dump_parser_checks_every_configuration(self):
+        spec=importlib.util.spec_from_file_location('verifier',ROOT/'tools/verify_apk_profile.py')
+        m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
+        fixture='''resource 0x7f030001 array/scope
+          () (array) size=1
+            [0] (string8) "com.whatsapp"
+          (v37) (array) size=1
+            [0] (string8) "android"
+        resource 0x7f030002 array/other
+          () (array) size=1
+            [0] (string8) "ignored"
+        '''
+        self.assertEqual([{'com.whatsapp'},{'android'}],m.scope_configs(fixture))
+        with self.assertRaises(AssertionError):m.scope_configs('missing')
 
 
-if __name__ == "__main__":
-    unittest.main()
+if __name__=='__main__':unittest.main()

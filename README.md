@@ -26,7 +26,28 @@
 - Android 16 (One UI 8.x)
 - Android 17 (One UI 9.x)
 
-On One UI 9 the full hook set is enabled. Hook setup paths that depend on Samsung or Android framework internals are fail-soft, so a moved or removed class/method is logged and skipped instead of aborting the whole module hook initialization.
+The Full APK enables the traditional hook set on One UI 9. The Minimal APK uses only four application scopes. Hook setup paths that depend on Samsung or Android framework internals are fail-soft, so a moved or removed class/method is logged and skipped instead of aborting the whole module hook initialization.
+
+## Full vs Minimal
+
+Each manually published release contains two separately built, signed APKs and their SHA-256 files:
+
+| APK | Profile | Intended use |
+| --- | --- | --- |
+| `KnoxPatch-vX.Y.Z-Minimal.apk` | Four application scopes, no `SystemHooks` or `system_server` hooks | Recommended for the S25 Ultra One UI 9 baseline: Knox Matrix, Samsung Account, Quick Share and Samsung Health |
+| `KnoxPatch-vX.Y.Z-Full.apk` | Traditional complete dispatcher, including on One UI 9 | Other supported fixes, including Secure Folder, Samsung Cloud, Samsung Flow, Secure Wi-Fi and security-service hooks |
+
+Minimal supports One UI 9. It refuses hook installation on earlier versions; use Full there. Its scopes are `com.samsung.android.kmxservice`, `com.osp.app.signin`, `com.samsung.android.app.sharelive` and `com.sec.android.app.shealth`. It does not restore every Samsung feature. Fewer hooks do not guarantee Play Integrity or Google Wallet approval.
+
+Full retains the original hook implementations and may modify `system_server` and Samsung security services. Compatibility still depends on the firmware and the individual feature; build checks are not physical validation of every Full feature.
+
+Both public APKs use `sepBasic` (`com.samsung.device`). `sepLite` (`com.samsung.device.lite`) remains available internally for devices that require that library; it is independent of the Full/Minimal choice. The Enhancer ZIP remains in source for its separate legacy/extra-feature requirements, but neither it nor sepLite is published in the main release.
+
+The APKs share package ID `io.mesalabs.knoxpatch`, versionCode and release signing certificate. Install the other profile over the current APK without uninstalling to preserve app data; the installer must permit replacement at the same versionCode. A higher installed versionCode requires a newer release. A LAB APK signed with a different certificate cannot update the release APK. LSPosed can retain manually selected scopes: after switching to Minimal explicitly remove Android system/framework and unrelated apps, then restart the previously hooked processes or reboot using your established recovery procedure. Minimal's dispatcher rejects the full path even if an old scope remains selected; replacing the APK does not undo hooks already installed in running processes.
+
+Local build tasks: `:app:assembleSepBasicFullRelease` and `:app:assembleSepBasicMinimalRelease`. `release.yml` remains **workflow_dispatch only**, restricted to `main`; merging a PR does not publish a release. The release checks each compiled APK's Manifest profile, packaged scope configurations, Xposed entrypoint and DEX hook markers independently before publishing both assets in one release. SHA-256 files cover the final signed APKs.
+
+The supported-app list below describes Full; Minimal is limited to the four apps above.
 
 ## Supported apps
 - ✅ [Auto Blocker](https://www.samsung.com/uk/support/mobile-devices/protect-your-galaxy-device-with-the-new-auto-blocker-feature/)
@@ -52,7 +73,7 @@ KnoxPatch Enhancer is a flashable zip that will take care of the (currently) non
 
 - Via the [Magisk](https://github.com/topjohnwu/Magisk)/[KernelSU](https://github.com/tiann/KernelSU) app (fix Galaxy Wearable apps/Smart View):
 
-  Download the module zip from the [latest release](https://github.com/igorcv88/KnoxPatch/releases/latest) and install it from the "Modules" tab inside the Magisk/KernelSU app. The app will then show an "Enhanced" badge if the module is installed and active:
+  Obtain the separately built Enhancer ZIP from a compatible historical release or a reviewed local build and install it from the "Modules" tab inside the Magisk/KernelSU app. The app will then show an "Enhanced" badge if the module is installed and active:
 
 <p align="center">
   <img loading="lazy" src="readme-res/kp-enhancer.png" width="35%" />
@@ -60,7 +81,7 @@ KnoxPatch Enhancer is a flashable zip that will take care of the (currently) non
 
 - Via a custom recovery (fix Secure Folder on legacy devices):
 
-  Legacy devices running One UI 2.x or 3.x with [FBE](https://source.android.com/docs/security/features/encryption/file-based) require additional patches in the system partition to fix Secure Folder. Download the module zip from the [latest release](https://github.com/igorcv88/KnoxPatch/releases/latest) and install it via a custom recovery, this will apply the necessary patches to fix Secure Folder. The zip will also create a backup of your original system files, flashing it again will restore them.
+  Legacy devices running One UI 2.x or 3.x with [FBE](https://source.android.com/docs/security/features/encryption/file-based) require additional patches in the system partition to fix Secure Folder. Obtain the separately built Enhancer ZIP from a compatible historical release or a reviewed local build and install it via a custom recovery, this will apply the necessary patches to fix Secure Folder. The zip will also create a backup of your original system files, flashing it again will restore them.
 
 ## Credits
 - Samsung

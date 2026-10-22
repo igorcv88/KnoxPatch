@@ -80,11 +80,13 @@ object MainHook : IYukiHookXposedInit {
             }
         }
 
-        // One UI 9 lab profile: keep only the application-scoped fixes needed
-        // for Samsung Account/Knox Matrix, Quick Share and Samsung Health.
-        // Crucially, do not initialize SystemHooks in system_server here.
-        // Prior One UI generations retain upstream's full compatibility set.
-        if (sepVersion >= Constants.ONEUI_9_0) {
+        // A build-time profile, independent of the Samsung library flavor.
+        // Full must retain the traditional dispatcher on One UI 9 as well.
+        if (BuildConfig.MINIMAL_PROFILE) {
+            if (sepVersion < Constants.ONEUI_9_0) {
+                YLog.error(msg = "$TAG: Minimal requires One UI 9; use Full on older devices.")
+                return@encase
+            }
             YLog.debug(msg = "$TAG: onHook: One UI 9 minimal app-only compatibility profile.")
             loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks)
             loadApp(Constants.SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks)

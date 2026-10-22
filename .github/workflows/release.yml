@@ -13,13 +13,12 @@ concurrency:
 env:
   RELEASE_SERIES: "0.8"
   RELEASE_PATCH_FLOOR: "3"
-  ENHANCER_VERSION: "0.5"
 
 jobs:
   release:
-    name: Build, sign and publish APKs and Enhancer
+    name: Build, verify and publish Full and Minimal APKs
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     steps:
       - name: Checkout repository
@@ -79,6 +78,12 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@v6
+
+      - name: Validate Full and Minimal source contracts
+        run: python3 -m unittest discover -s tests -v
+
       - name: Set up Gradle cache
         uses: gradle/actions/setup-gradle@v6
 
@@ -133,71 +138,42 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew --build-cache \
-            :app:assembleRelease \
+            :app:assembleSepBasicFullRelease \
+            :app:assembleSepBasicMinimalRelease \
             -PreleaseVersionCode="$VERSION_CODE" \
             -PreleaseVersionName="$VERSION_NAME" \
             --no-daemon
 
       - name: Verify and prepare APK assets
+        env:
+          STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         run: |
           set -euo pipefail
 
           BUILD_TOOLS_DIR="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)"
-          BASIC_APK="$(find app/build/outputs/apk/sepBasic/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-          LITE_APK="$(find app/build/outputs/apk/sepLite/release -maxdepth 1 -type f -name '*.apk' | head -n 1)"
-
-          test -n "$BASIC_APK"
-          test -n "$LITE_APK"
-          test -f "$BASIC_APK"
-          test -f "$LITE_APK"
-
-          BASIC_ASSET="KnoxPatch-v${VERSION_NAME}.apk"
-          LITE_ASSET="KnoxPatch-v${VERSION_NAME}-sep-lite.apk"
-          cp "$BASIC_APK" "$BASIC_ASSET"
-          cp "$LITE_APK" "$LITE_ASSET"
-
-          for apk in "$BASIC_ASSET" "$LITE_ASSET"; do
+          APKANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/apkanalyzer' -type f | sort | tail -n 1)"
+          test -x "$APKANALYZER"
+          EXPECTED_CERT="$(keytool -exportcert -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | awk '{print $1}')"
+          for profile in Full Minimal; do
+            mapfile -t apks < <(find "app/build/outputs/apk/sepBasic${profile}/release" -maxdepth 1 -type f -name '*.apk')
+            [[ "${#apks[@]}" == 1 ]]
+            apk="KnoxPatch-v${VERSION_NAME}-${profile}.apk"
+            cp "${apks[0]}" "$apk"
             "$BUILD_TOOLS_DIR/zipalign" -c -P 16 4 "$apk"
-            "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$apk"
-            BADGING="$($BUILD_TOOLS_DIR/aapt dump badging "$apk" | head -n 1)"
+            "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$apk" > "${apk}.cert.txt"
+            cat "${apk}.cert.txt"
+            ACTUAL_CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${apk}.cert.txt" | tr '[:upper:]' '[:lower:]')"
+            [[ "$ACTUAL_CERT" == "$EXPECTED_CERT" ]]
+            BADGING="$($BUILD_TOOLS_DIR/aapt dump badging "$apk" | sed -n '1p')"
             grep -F "package: name='io.mesalabs.knoxpatch'" <<< "$BADGING"
             grep -F "versionCode='${VERSION_CODE}'" <<< "$BADGING"
             grep -F "versionName='${VERSION_NAME}'" <<< "$BADGING"
+            python3 tools/verify_apk_profile.py "$apk" "$profile" \
+              --aapt2 "$BUILD_TOOLS_DIR/aapt2" --apkanalyzer "$APKANALYZER"
             sha256sum "$apk" > "${apk}.sha256"
           done
-
-          {
-            echo "BASIC_ASSET=$BASIC_ASSET"
-            echo "LITE_ASSET=$LITE_ASSET"
-          } >> "$GITHUB_ENV"
-
-      - name: Build KnoxPatch Enhancer
-        run: |
-          set -euo pipefail
-          ENHANCER_ASSET="KnoxPatch-Enhancer-v${ENHANCER_VERSION}.zip"
-
-          rm -f enhancer/*.sha256
-          while IFS= read -r -d '' file; do
-            case "$file" in
-              *.gitignore|*.sha256|*.md|*.json) continue ;;
-            esac
-            printf '%s' "$(sha256sum "$file" | awk '{print $1}')" > "${file}.sha256"
-          done < <(find enhancer -type f -print0)
-
-          (
-            cd enhancer
-            zip -r "../$ENHANCER_ASSET" . \
-              -x '*.gitignore' \
-              -x '*.json' \
-              -x '*.md'
-          )
-
-          test -s "$ENHANCER_ASSET"
-          unzip -t "$ENHANCER_ASSET"
-          unzip -p "$ENHANCER_ASSET" module.prop | grep -F "version=v${ENHANCER_VERSION}"
-          unzip -p "$ENHANCER_ASSET" module.prop | grep -F 'id=kp_enhancer'
-          sha256sum "$ENHANCER_ASSET" > "${ENHANCER_ASSET}.sha256"
-          echo "ENHANCER_ASSET=$ENHANCER_ASSET" >> "$GITHUB_ENV"
+          [[ "$(sha256sum KnoxPatch-v${VERSION_NAME}-Full.apk | cut -d' ' -f1)" != "$(sha256sum KnoxPatch-v${VERSION_NAME}-Minimal.apk | cut -d' ' -f1)" ]]
 
       - name: Publish GitHub Release
         env:
@@ -205,14 +181,12 @@ jobs:
         run: |
           set -euo pipefail
           gh release create "$RELEASE_TAG" \
-            "$BASIC_ASSET" \
-            "${BASIC_ASSET}.sha256" \
-            "$LITE_ASSET" \
-            "${LITE_ASSET}.sha256" \
-            "$ENHANCER_ASSET" \
-            "${ENHANCER_ASSET}.sha256" \
+            "KnoxPatch-v${VERSION_NAME}-Full.apk" \
+            "KnoxPatch-v${VERSION_NAME}-Full.apk.sha256" \
+            "KnoxPatch-v${VERSION_NAME}-Minimal.apk" \
+            "KnoxPatch-v${VERSION_NAME}-Minimal.apk.sha256" \
             --verify-tag \
-            --title "KnoxPatch ${VERSION_NAME} (Enhancer v${ENHANCER_VERSION})" \
+            --title "KnoxPatch ${VERSION_NAME} — Full + Minimal" \
             --generate-notes \
             --latest
 
@@ -235,5 +209,4 @@ jobs:
         if: always()
         run: |
           rm -f release.keystore
-          find enhancer -type f -name '*.sha256' -delete || true
           sed -i '/^releaseStoreFile=/d;/^releaseStorePassword=/d;/^releaseKeyAlias=/d;/^releaseKeyPassword=/d;/^gpr.user=/d;/^gpr.key=/d' gradle.properties || true
