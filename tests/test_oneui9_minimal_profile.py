@@ -47,7 +47,8 @@ class Profiles(unittest.TestCase):
         b=s.index('loadSystem(SystemHooks)')
         branch=s[a:b]
         self.assertIn('return@encase',branch)
-        self.assertEqual(4,branch.count('loadApp('))
+        self.assertEqual(5,branch.count('loadApp('))
+        self.assertIn('KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks',branch)
         self.assertNotIn('loadSystem(',branch)
         self.assertNotIn('if (sepVersion >= Constants.ONEUI_9_0)', s)
         self.assertIn('SAMSUNG_HEALTH_MONITOR_PACKAGE_NAME, RootDetectionHooks',s[b:])

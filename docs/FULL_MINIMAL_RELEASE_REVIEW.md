@@ -21,3 +21,7 @@ Only Full/Minimal APKs and their SHA-256 files go into the main GitHub Release. 
 ## Switching and rollback
 
 Release profiles share package/version/certificate; replace without uninstalling when Android permits same-version replacement. Do not uninstall to work around a LAB certificate mismatch. Select only the four recommended scopes after moving to Minimal; LSPosed may retain old selections. Already running processes retain old hooks until restarted. Keep the previously working APK and configuration; disable the newly tested module and use the established recovery/reboot procedure if needed. A passing build does not establish Play Integrity or Wallet outcomes.
+
+## Knox Matrix app-local parity
+
+Minimal installs both KnoxMatrixHooks and SamsungKeystoreHooks in Knox Matrix, matching Full within that process. This adds AttestParameterSpec.isVerifiableIntegrity handling without adding a fifth process or system_server hooks. The requirement is based on code parity; physical necessity on One UI 9 remains unproven.

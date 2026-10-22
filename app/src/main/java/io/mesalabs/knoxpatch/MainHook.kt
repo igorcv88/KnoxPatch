@@ -89,6 +89,7 @@ object MainHook : IYukiHookXposedInit {
             }
             YLog.debug(msg = "$TAG: onHook: One UI 9 minimal app-only compatibility profile.")
             loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks)
+            loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.QUICK_SHARE_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.SAMSUNG_HEALTH_PACKAGE_NAME, KnoxSDKHooks)
