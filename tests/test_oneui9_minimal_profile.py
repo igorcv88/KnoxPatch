@@ -78,6 +78,8 @@ class Profiles(unittest.TestCase):
             [0] (string8) "ignored"
         '''
         self.assertEqual([{'com.whatsapp'},{'android'}],m.scope_configs(fixture))
+        self.assertEqual([{'com.whatsapp'},{'android'}],m.scope_configs(fixture.replace('array/scope','array/renamed'),0x7f030001))
+        with self.assertRaises(AssertionError):m.scope_configs(fixture,0x7f030099)
         with self.assertRaises(AssertionError):m.scope_configs('missing')
 
 
