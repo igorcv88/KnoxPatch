@@ -32,6 +32,9 @@
             android:name="theming-meta-xml"
             android:value="@xml/sep_color_theme_meta"/>
 
+        <meta-data android:name="io.mesalabs.knoxpatch.HOOK_PROFILE"
+            android:value="${hookProfile}" />
+
         <!-- Xposed -->
         <meta-data
             android:name="xposedmodule"

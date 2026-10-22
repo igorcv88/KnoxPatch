@@ -80,8 +80,20 @@ object MainHook : IYukiHookXposedInit {
             }
         }
 
-        if (sepVersion >= Constants.ONEUI_9_0) {
-            YLog.debug(msg = "$TAG: onHook: loading full One UI 9 compatibility hook set.")
+        // A build-time profile, independent of the Samsung library flavor.
+        // Full must retain the traditional dispatcher on One UI 9 as well.
+        if (BuildConfig.MINIMAL_PROFILE) {
+            if (sepVersion < Constants.ONEUI_9_0) {
+                YLog.error(msg = "$TAG: Minimal requires One UI 9; use Full on older devices.")
+                return@encase
+            }
+            YLog.debug(msg = "$TAG: onHook: One UI 9 minimal app-only compatibility profile.")
+            loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks)
+            loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks)
+            loadApp(Constants.SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks)
+            loadApp(Constants.QUICK_SHARE_PACKAGE_NAME, SamsungKeystoreHooks)
+            loadApp(Constants.SAMSUNG_HEALTH_PACKAGE_NAME, KnoxSDKHooks)
+            return@encase
         }
 
         loadSystem(SystemHooks)

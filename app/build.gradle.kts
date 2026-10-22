@@ -78,9 +78,19 @@ android {
         }
     }
 
-    flavorDimensions += "sepCategory"
+    flavorDimensions += listOf("sepCategory", "hookProfile")
 
     productFlavors {
+        create("full") {
+            dimension = "hookProfile"
+            buildConfigField("boolean", "MINIMAL_PROFILE", "false")
+            manifestPlaceholders["hookProfile"] = "Full"
+        }
+        create("minimal") {
+            dimension = "hookProfile"
+            buildConfigField("boolean", "MINIMAL_PROFILE", "true")
+            manifestPlaceholders["hookProfile"] = "Minimal"
+        }
         create("sepBasic") {
             dimension = "sepCategory"
         }
