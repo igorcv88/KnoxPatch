@@ -111,15 +111,12 @@ jobs:
 
           expected_cert="$(keytool -exportcert -keystore release.keystore \
             -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | awk '{print $1}')"
-          actual_cert="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${apk}.cert.txt" | tr '[:upper:]' '[:lower:]')"
-          # Only public certificate fingerprints are logged. Do not expose any key material.
-          if [[ -z "$actual_cert" ]]; then
-            echo "apksigner did not emit the expected signer fingerprint:" >&2
-            grep -E '^Signer #1 certificate SHA-256 digest:' "${apk}.cert.txt" >&2 || true
-            exit 1
-          fi
-          if [[ "$actual_cert" != "$expected_cert" ]]; then
-            echo "APK signer mismatch: expected certificate SHA-256 $expected_cert, found $actual_cert" >&2
+          # Compare the exact certificate digest regardless of how this version
+          # of apksigner labels its signer lines. Its output contains only public
+          # certificate metadata; private keys remain on the runner.
+          if ! grep -Fqi "$expected_cert" "${apk}.cert.txt"; then
+            echo "APK was not signed with the expected certificate SHA-256 $expected_cert" >&2
+            sed -n '1,40p' "${apk}.cert.txt" >&2
             exit 1
           fi
 
