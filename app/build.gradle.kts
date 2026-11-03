@@ -84,12 +84,23 @@ android {
         create("full") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "false")
+            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "false")
             manifestPlaceholders["hookProfile"] = "Full"
         }
         create("minimal") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "true")
+            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "false")
             manifestPlaceholders["hookProfile"] = "Minimal"
+        }
+        create("secureFolder") {
+            dimension = "hookProfile"
+            // An independent LSPosed module: never replace the working Minimal APK.
+            applicationIdSuffix = ".securefolderlab"
+            versionNameSuffix = "-sf-dzif-lab"
+            buildConfigField("boolean", "MINIMAL_PROFILE", "false")
+            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "true")
+            manifestPlaceholders["hookProfile"] = "SecureFolder"
         }
         create("sepBasic") {
             dimension = "sepCategory"

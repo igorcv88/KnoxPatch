@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Experimental LSPosed scope: only the Secure Folder APK, across qualifiers. -->
+<resources>
+    <string-array name="scope">
+        <item>com.samsung.knox.securefolder</item>
+    </string-array>
+</resources>

@@ -18,6 +18,8 @@
 
 package io.mesalabs.knoxpatch
 
+import android.os.Build
+
 import com.highcapable.yukihookapi.YukiHookAPI.encase
 import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
 import com.highcapable.yukihookapi.hook.factory.configs
@@ -30,6 +32,7 @@ import io.mesalabs.knoxpatch.hooks.PropSpoofHooks
 import io.mesalabs.knoxpatch.hooks.RootDetectionHooks
 import io.mesalabs.knoxpatch.hooks.SAKDisableHooks
 import io.mesalabs.knoxpatch.hooks.SamsungKeystoreHooks
+import io.mesalabs.knoxpatch.hooks.SecureFolderExperimentalHooks
 import io.mesalabs.knoxpatch.hooks.SystemHooks
 import io.mesalabs.knoxpatch.utils.BuildUtils
 import io.mesalabs.knoxpatch.utils.Constants
@@ -78,6 +81,18 @@ object MainHook : IYukiHookXposedInit {
                 YLog.error(msg = "$TAG: onHook: One UI $oneUiVersion is not yet supported.")
                 return@encase
             }
+        }
+
+        // Experimental companion: only the Secure Folder app process. Never
+        // load into android/system_server or change global device properties.
+        if (BuildConfig.SECURE_FOLDER_EXPERIMENTAL) {
+            if (Build.VERSION.SDK_INT != 37 || sepVersion != Constants.ONEUI_9_0) {
+                YLog.error(msg = "$TAG: Secure Folder LAB requires Android 17 / One UI 9.")
+                return@encase
+            }
+            YLog.debug(msg = "$TAG: Secure Folder DZIF app-only experimental profile.")
+            loadApp(Constants.SECURE_FOLDER_PACKAGE_NAME, SecureFolderExperimentalHooks)
+            return@encase
         }
 
         // A build-time profile, independent of the Samsung library flavor.

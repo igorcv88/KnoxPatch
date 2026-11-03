@@ -39,7 +39,13 @@ class Profiles(unittest.TestCase):
         self.assertIn('listOf("sepCategory", "hookProfile")',s)
         for value in ('true','false'):
             self.assertIn(f'buildConfigField("boolean", "MINIMAL_PROFILE", "{value}")',s)
-        self.assertNotIn('applicationIdSuffix',s)
+        # Full and Minimal retain the original installable package ID. The
+        # experimental companion may have a distinct suffix without replacing
+        # the currently installed Minimal module.
+        full=s.split('create("full")',1)[1].split('create("minimal")',1)[0]
+        minimal=s.split('create("minimal")',1)[1].split('create("secureFolder")',1)[0]
+        self.assertNotIn('applicationIdSuffix',full)
+        self.assertNotIn('applicationIdSuffix',minimal)
 
     def test_minimal_dispatch_exits_before_system_and_full_keeps_original_calls(self):
         s=(ROOT/'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt').read_text()
