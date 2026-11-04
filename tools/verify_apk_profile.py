@@ -16,6 +16,7 @@ ANDROID = '{http://schemas.android.com/apk/res/android}'
 MINIMAL = {'com.samsung.android.kmxservice', 'com.osp.app.signin',
            'com.samsung.android.app.sharelive', 'com.sec.android.app.shealth'}
 SECURE_FOLDER = {'com.samsung.knox.securefolder'}
+BALANCED = MINIMAL | SECURE_FOLDER
 WA = {'com.whatsapp', 'com.whatsapp.w4b', 'com.waenhancer.community'}
 SYSTEM = {'com.android.server.knox.dar.DarManagerService',
           'com.samsung.android.knoxguard.service.KnoxGuardService',
@@ -64,9 +65,7 @@ def dex_strings(data):
 def verify(apk, profile, aapt2, apkanalyzer):
     xml = subprocess.check_output([apkanalyzer, 'manifest', 'print', str(apk)], text=True)
     manifest = ET.fromstring(xml)
-    module = ('com.waenhancer.community' if profile == 'AppOnly'
-              else 'io.mesalabs.knoxpatch.securefolderlab' if profile == 'SecureFolder'
-              else 'io.mesalabs.knoxpatch')
+    module = 'com.waenhancer.community' if profile == 'AppOnly' else 'io.mesalabs.knoxpatch'
     assert manifest.get('package') == module
     app = manifest.find('application')
     metadata = {e.get(ANDROID+'name'): e for e in app.findall('meta-data')}
@@ -94,7 +93,7 @@ def verify(apk, profile, aapt2, apkanalyzer):
             actual = set(archive.read(modern).decode().splitlines())
             expected = (WA if profile == 'AppOnly' else
                         MINIMAL if profile == 'Minimal' else
-                        SECURE_FOLDER if profile == 'SecureFolder' else configs[-1])
+                        BALANCED if profile == 'Balanced' else configs[-1])
             assert actual == expected, (actual, expected)
         assert archive.read('assets/xposed_init').strip(), 'Missing legacy Xposed entrypoint'
     if profile == 'Minimal':
@@ -103,9 +102,9 @@ def verify(apk, profile, aapt2, apkanalyzer):
     elif profile == 'Full':
         assert all('android' in c and len(c) > 4 for c in configs), configs
         assert SYSTEM <= strings, 'Full lost system hook implementations'
-    elif profile == 'SecureFolder':
-        assert all(c == SECURE_FOLDER for c in configs), configs
-        assert not SYSTEM.intersection(strings), 'Experimental APK retained system hooks'
+    elif profile == 'Balanced':
+        assert all(c == BALANCED for c in configs), configs
+        assert not SYSTEM.intersection(strings), 'Balanced includes system hook implementations'
         assert 'com.samsung.knox.securefolder.provisioning.setup.viewmodel.WelcomeViewModel' in strings
         assert 'isCompromisedDevice' in strings
     else:
@@ -125,7 +124,7 @@ def verify(apk, profile, aapt2, apkanalyzer):
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('apk', type=pathlib.Path)
-    p.add_argument('profile', choices=['Full', 'Minimal', 'SecureFolder', 'AppOnly'])
+    p.add_argument('profile', choices=['Full', 'Balanced', 'Minimal', 'AppOnly'])
     p.add_argument('--aapt2', required=True)
     p.add_argument('--apkanalyzer', required=True)
     a = p.parse_args()

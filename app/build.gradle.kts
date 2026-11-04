@@ -84,23 +84,22 @@ android {
         create("full") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "false")
-            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "false")
+            buildConfigField("boolean", "BALANCED_PROFILE", "false")
             manifestPlaceholders["hookProfile"] = "Full"
         }
         create("minimal") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "true")
-            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "false")
+            buildConfigField("boolean", "BALANCED_PROFILE", "false")
             manifestPlaceholders["hookProfile"] = "Minimal"
         }
-        create("secureFolder") {
+        create("balanced") {
             dimension = "hookProfile"
-            // An independent LSPosed module: never replace the working Minimal APK.
-            applicationIdSuffix = ".securefolderlab"
-            versionNameSuffix = "-sf-dzif-lab"
+            // Between Minimal and Full: Minimal apps plus the DZIF Secure Folder hook.
+            // Shares the official package ID, signing key and version with both profiles.
             buildConfigField("boolean", "MINIMAL_PROFILE", "false")
-            buildConfigField("boolean", "SECURE_FOLDER_EXPERIMENTAL", "true")
-            manifestPlaceholders["hookProfile"] = "SecureFolder"
+            buildConfigField("boolean", "BALANCED_PROFILE", "true")
+            manifestPlaceholders["hookProfile"] = "Balanced"
         }
         create("sepBasic") {
             dimension = "sepCategory"

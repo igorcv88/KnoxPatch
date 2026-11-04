@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name" translatable="false">KnoxPatch Secure Folder LAB</string>
-    <string name="module_description">Experimental DZIF Secure Folder welcome-screen hook. No system_server scope.</string>
-</resources>

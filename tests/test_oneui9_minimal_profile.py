@@ -39,37 +39,43 @@ class Profiles(unittest.TestCase):
         self.assertIn('listOf("sepCategory", "hookProfile")',s)
         for value in ('true','false'):
             self.assertIn(f'buildConfigField("boolean", "MINIMAL_PROFILE", "{value}")',s)
-        # Full and Minimal retain the original installable package ID. The
-        # experimental companion may have a distinct suffix without replacing
-        # the currently installed Minimal module.
+        # All three release flavors must share package ID, version and signing.
         full=s.split('create("full")',1)[1].split('create("minimal")',1)[0]
-        minimal=s.split('create("minimal")',1)[1].split('create("secureFolder")',1)[0]
+        minimal=s.split('create("minimal")',1)[1].split('create("balanced")',1)[0]
+        balanced=s.split('create("balanced")',1)[1].split('create("sepBasic")',1)[0]
         self.assertNotIn('applicationIdSuffix',full)
         self.assertNotIn('applicationIdSuffix',minimal)
+        self.assertNotIn('applicationIdSuffix',balanced)
+        self.assertNotIn('versionNameSuffix',balanced)
+        self.assertIn('buildConfigField("boolean", "BALANCED_PROFILE", "true")',balanced)
 
     def test_minimal_dispatch_exits_before_system_and_full_keeps_original_calls(self):
         s=(ROOT/'app/src/main/java/io/mesalabs/knoxpatch/MainHook.kt').read_text()
-        a=s.index('if (BuildConfig.MINIMAL_PROFILE)')
+        a=s.index('if (BuildConfig.MINIMAL_PROFILE || BuildConfig.BALANCED_PROFILE)')
         b=s.index('loadSystem(SystemHooks)')
         branch=s[a:b]
         self.assertIn('return@encase',branch)
-        self.assertEqual(5,branch.count('loadApp('))
+        self.assertEqual(6,branch.count('loadApp('))
         self.assertIn('KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks',branch)
+        self.assertIn('if (BuildConfig.BALANCED_PROFILE)',branch)
+        self.assertIn('SECURE_FOLDER_PACKAGE_NAME, SecureFolderHooks',branch)
         self.assertNotIn('loadSystem(',branch)
         self.assertNotIn('if (sepVersion >= Constants.ONEUI_9_0)', s)
         self.assertIn('SAMSUNG_HEALTH_MONITOR_PACKAGE_NAME, RootDetectionHooks',s[b:])
 
-    def test_release_is_manual_two_sepBasic_assets(self):
+    def test_release_is_manual_three_sepBasic_assets(self):
         s=(ROOT/'.github/workflows/release.yml').read_text()
         self.assertIn('workflow_dispatch:',s)
         self.assertNotIn('pull_request:',s)
         self.assertNotIn('  push:',s)
         self.assertIn(':app:assembleSepBasicFullRelease',s)
+        self.assertIn(':app:assembleSepBasicBalancedRelease',s)
         self.assertIn(':app:assembleSepBasicMinimalRelease',s)
         self.assertNotIn('assembleRelease ',s)
         self.assertNotIn('ENHANCER_ASSET',s)
         self.assertNotIn('LITE_ASSET',s)
-        self.assertIn('"$ACTUAL_CERT" == "$EXPECTED_CERT"',s)
+        self.assertIn('grep -Fqi "$EXPECTED_CERT"',s)
+        self.assertIn('"KnoxPatch-v${VERSION_NAME}-Balanced.apk"',s)
         self.assertIn('verify_apk_profile.py',s)
 
     def test_scope_dump_parser_checks_every_configuration(self):
