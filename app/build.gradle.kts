@@ -84,12 +84,22 @@ android {
         create("full") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "false")
+            buildConfigField("boolean", "BALANCED_PROFILE", "false")
             manifestPlaceholders["hookProfile"] = "Full"
         }
         create("minimal") {
             dimension = "hookProfile"
             buildConfigField("boolean", "MINIMAL_PROFILE", "true")
+            buildConfigField("boolean", "BALANCED_PROFILE", "false")
             manifestPlaceholders["hookProfile"] = "Minimal"
+        }
+        create("balanced") {
+            dimension = "hookProfile"
+            // Between Minimal and Full: Minimal apps plus the DZIF Secure Folder hook.
+            // Shares the official package ID, signing key and version with both profiles.
+            buildConfigField("boolean", "MINIMAL_PROFILE", "false")
+            buildConfigField("boolean", "BALANCED_PROFILE", "true")
+            manifestPlaceholders["hookProfile"] = "Balanced"
         }
         create("sepBasic") {
             dimension = "sepCategory"

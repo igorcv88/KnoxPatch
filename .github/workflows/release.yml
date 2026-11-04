@@ -16,7 +16,7 @@ env:
 
 jobs:
   release:
-    name: Build, verify and publish Full and Minimal APKs
+    name: Build, verify and publish Full, Balanced and Minimal APKs
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -81,7 +81,7 @@ jobs:
       - name: Validate Gradle wrapper
         uses: gradle/actions/wrapper-validation@v6
 
-      - name: Validate Full and Minimal source contracts
+      - name: Validate all three profile source contracts
         run: python3 -m unittest discover -s tests -v
 
       - name: Set up Gradle cache
@@ -139,6 +139,7 @@ jobs:
           chmod +x gradlew
           ./gradlew --build-cache \
             :app:assembleSepBasicFullRelease \
+            :app:assembleSepBasicBalancedRelease \
             :app:assembleSepBasicMinimalRelease \
             -PreleaseVersionCode="$VERSION_CODE" \
             -PreleaseVersionName="$VERSION_NAME" \
@@ -155,16 +156,20 @@ jobs:
           APKANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -path '*/bin/apkanalyzer' -type f | sort | tail -n 1)"
           test -x "$APKANALYZER"
           EXPECTED_CERT="$(keytool -exportcert -keystore release.keystore -storepass "$STORE_PASSWORD" -alias "$KEY_ALIAS" | sha256sum | awk '{print $1}')"
-          for profile in Full Minimal; do
+          for profile in Full Balanced Minimal; do
             mapfile -t apks < <(find "app/build/outputs/apk/sepBasic${profile}/release" -maxdepth 1 -type f -name '*.apk')
             [[ "${#apks[@]}" == 1 ]]
             apk="KnoxPatch-v${VERSION_NAME}-${profile}.apk"
             cp "${apks[0]}" "$apk"
             "$BUILD_TOOLS_DIR/zipalign" -c -P 16 4 "$apk"
             "$BUILD_TOOLS_DIR/apksigner" verify --verbose --print-certs "$apk" > "${apk}.cert.txt"
-            cat "${apk}.cert.txt"
-            ACTUAL_CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "${apk}.cert.txt" | tr '[:upper:]' '[:lower:]')"
-            [[ "$ACTUAL_CERT" == "$EXPECTED_CERT" ]]
+            # apksigner's label can change across build-tools; verify the exact
+            # public certificate fingerprint, not a version-specific label.
+            if ! grep -Fqi "$EXPECTED_CERT" "${apk}.cert.txt"; then
+              echo "Wrong signing certificate in $apk (expected SHA-256 $EXPECTED_CERT)" >&2
+              sed -n '1,40p' "${apk}.cert.txt" >&2
+              exit 1
+            fi
             BADGING="$($BUILD_TOOLS_DIR/aapt dump badging "$apk" | sed -n '1p')"
             grep -F "package: name='io.mesalabs.knoxpatch'" <<< "$BADGING"
             grep -F "versionCode='${VERSION_CODE}'" <<< "$BADGING"
@@ -173,6 +178,8 @@ jobs:
               --aapt2 "$BUILD_TOOLS_DIR/aapt2" --apkanalyzer "$APKANALYZER"
             sha256sum "$apk" > "${apk}.sha256"
           done
+          [[ "$(sha256sum KnoxPatch-v${VERSION_NAME}-Full.apk | cut -d' ' -f1)" != "$(sha256sum KnoxPatch-v${VERSION_NAME}-Balanced.apk | cut -d' ' -f1)" ]]
+          [[ "$(sha256sum KnoxPatch-v${VERSION_NAME}-Balanced.apk | cut -d' ' -f1)" != "$(sha256sum KnoxPatch-v${VERSION_NAME}-Minimal.apk | cut -d' ' -f1)" ]]
           [[ "$(sha256sum KnoxPatch-v${VERSION_NAME}-Full.apk | cut -d' ' -f1)" != "$(sha256sum KnoxPatch-v${VERSION_NAME}-Minimal.apk | cut -d' ' -f1)" ]]
 
       - name: Publish GitHub Release
@@ -183,10 +190,12 @@ jobs:
           gh release create "$RELEASE_TAG" \
             "KnoxPatch-v${VERSION_NAME}-Full.apk" \
             "KnoxPatch-v${VERSION_NAME}-Full.apk.sha256" \
+            "KnoxPatch-v${VERSION_NAME}-Balanced.apk" \
+            "KnoxPatch-v${VERSION_NAME}-Balanced.apk.sha256" \
             "KnoxPatch-v${VERSION_NAME}-Minimal.apk" \
             "KnoxPatch-v${VERSION_NAME}-Minimal.apk.sha256" \
             --verify-tag \
-            --title "KnoxPatch ${VERSION_NAME} — Full + Minimal" \
+            --title "KnoxPatch ${VERSION_NAME} — Full + Balanced + Minimal" \
             --generate-notes \
             --latest
 

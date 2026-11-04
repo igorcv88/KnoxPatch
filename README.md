@@ -26,28 +26,31 @@
 - Android 16 (One UI 8.x)
 - Android 17 (One UI 9.x)
 
-The Full APK enables the traditional hook set on One UI 9. The Minimal APK uses only four application scopes. Hook setup paths that depend on Samsung or Android framework internals are fail-soft, so a moved or removed class/method is logged and skipped instead of aborting the whole module hook initialization.
+The Full APK enables the traditional hook set on One UI 9. Minimal uses four application scopes. Balanced adds only Secure Folder to Minimal, using a device-tested app-only workaround for the DZIF firmware. Hook setup paths that depend on Samsung or Android framework internals are fail-soft: a missing class or method is logged and skipped.
 
-## Full vs Minimal
+## Full, Balanced and Minimal
 
-Each manually published release contains two separately built, signed APKs and their SHA-256 files:
+Each manually published release contains three separately built, signed APKs and their SHA-256 files:
 
 | APK | Profile | Intended use |
 | --- | --- | --- |
 | `KnoxPatch-vX.Y.Z-Minimal.apk` | Four application scopes, no `SystemHooks` or `system_server` hooks | Recommended for the S25 Ultra One UI 9 baseline: Knox Matrix, Samsung Account, Quick Share and Samsung Health |
+| `KnoxPatch-vX.Y.Z-Balanced.apk` | Minimal's four scopes plus Secure Folder, with no `SystemHooks` or `system_server` hooks | One UI 9 / Android 17 DZIF: Minimal functionality and Secure Folder without the Full system hooks |
 | `KnoxPatch-vX.Y.Z-Full.apk` | Traditional complete dispatcher, including on One UI 9 | Other supported fixes, including Secure Folder, Samsung Cloud, Samsung Flow, Secure Wi-Fi and security-service hooks |
 
 Minimal supports One UI 9. It refuses hook installation on earlier versions; use Full there. Its scopes are `com.samsung.android.kmxservice`, `com.osp.app.signin`, `com.samsung.android.app.sharelive` and `com.sec.android.app.shealth`. It does not restore every Samsung feature. Fewer hooks do not guarantee Play Integrity or Google Wallet approval.
 
+Balanced adds `com.samsung.knox.securefolder` to those four scopes. On Secure Folder 2.0.30.32 / Android 17 DZIF, its app-local hook intercepts `WelcomeViewModel.isCompromisedDevice()`; no system property, DAR, KeyMint or warranty-fuse changes are attempted. Secure Folder setup was successfully tested on an S25 Ultra DZIF, but operation on other firmware builds, the security properties of the resulting container and continued Wallet compatibility cannot be inferred from that one test. Balanced refuses hook initialization outside Android 17 / One UI 9.
+
 Full retains the original hook implementations and may modify `system_server` and Samsung security services. Compatibility still depends on the firmware and the individual feature; build checks are not physical validation of every Full feature.
 
-Both public APKs use `sepBasic` (`com.samsung.device`). `sepLite` (`com.samsung.device.lite`) remains available internally for devices that require that library; it is independent of the Full/Minimal choice. The Enhancer ZIP remains in source for its separate legacy/extra-feature requirements, but neither it nor sepLite is published in the main release.
+All three public APKs use `sepBasic` (`com.samsung.device`). `sepLite` (`com.samsung.device.lite`) remains available internally for devices that require that library; it is independent of the hook-profile choice. The Enhancer ZIP remains in source for its separate legacy/extra-feature requirements, but neither it nor sepLite is published in the main release.
 
-The APKs share package ID `io.mesalabs.knoxpatch`, versionCode and release signing certificate. Install the other profile over the current APK without uninstalling to preserve app data; the installer must permit replacement at the same versionCode. A higher installed versionCode requires a newer release. A LAB APK signed with a different certificate cannot update the release APK. LSPosed can retain manually selected scopes: after switching to Minimal explicitly remove Android system/framework and unrelated apps, then restart the previously hooked processes or reboot using your established recovery procedure. Minimal's dispatcher rejects the full path even if an old scope remains selected; replacing the APK does not undo hooks already installed in running processes.
+The APKs share package ID `io.mesalabs.knoxpatch`, versionCode and release signing certificate. Install another profile over the current APK without uninstalling to preserve app data; the installer must permit replacement at the same versionCode. A higher installed versionCode requires a newer release. The former Secure Folder LAB used a separate package ID and must be disabled/uninstalled in LSPosed before using Balanced, to prevent duplicate hooks. LSPosed can retain manually selected scopes: on Balanced select only the five apps listed above, removing Android system/framework and unrelated apps, then restart the previously hooked processes or reboot using your established recovery procedure. Minimal/Balanced reject the full path even if old scopes remain selected; replacing the APK does not undo hooks already installed in running processes.
 
-Local build tasks: `:app:assembleSepBasicFullRelease` and `:app:assembleSepBasicMinimalRelease`. `release.yml` remains **workflow_dispatch only**, restricted to `main`; merging a PR does not publish a release. The release checks each compiled APK's Manifest profile, packaged scope configurations, Xposed entrypoint and DEX hook markers independently before publishing both assets in one release. SHA-256 files cover the final signed APKs.
+Local build tasks: `:app:assembleSepBasicFullRelease`, `:app:assembleSepBasicBalancedRelease` and `:app:assembleSepBasicMinimalRelease`. `release.yml` remains **workflow_dispatch only**, restricted to `main`; merging a PR does not publish a release. The release checks each compiled APK's Manifest profile, packaged scope configurations, Xposed entrypoint and DEX hook markers independently before publishing all three assets in one release. SHA-256 files cover the final signed APKs.
 
-The supported-app list below describes Full; Minimal is limited to the four apps above.
+The supported-app list below describes Full; Minimal has four scopes and Balanced adds only Secure Folder.
 
 ## Supported apps
 - ✅ [Auto Blocker](https://www.samsung.com/uk/support/mobile-devices/protect-your-galaxy-device-with-the-new-auto-blocker-feature/)

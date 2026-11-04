@@ -15,6 +15,8 @@ import zipfile
 ANDROID = '{http://schemas.android.com/apk/res/android}'
 MINIMAL = {'com.samsung.android.kmxservice', 'com.osp.app.signin',
            'com.samsung.android.app.sharelive', 'com.sec.android.app.shealth'}
+SECURE_FOLDER = {'com.samsung.knox.securefolder'}
+BALANCED = MINIMAL | SECURE_FOLDER
 WA = {'com.whatsapp', 'com.whatsapp.w4b', 'com.waenhancer.community'}
 SYSTEM = {'com.android.server.knox.dar.DarManagerService',
           'com.samsung.android.knoxguard.service.KnoxGuardService',
@@ -89,7 +91,10 @@ def verify(apk, profile, aapt2, apkanalyzer):
         modern = 'META-INF/xposed/scope.list'
         if modern in archive.namelist():
             actual = set(archive.read(modern).decode().splitlines())
-            assert actual == (WA if profile == 'AppOnly' else MINIMAL if profile == 'Minimal' else configs[-1])
+            expected = (WA if profile == 'AppOnly' else
+                        MINIMAL if profile == 'Minimal' else
+                        BALANCED if profile == 'Balanced' else configs[-1])
+            assert actual == expected, (actual, expected)
         assert archive.read('assets/xposed_init').strip(), 'Missing legacy Xposed entrypoint'
     if profile == 'Minimal':
         assert all(c == MINIMAL for c in configs), configs
@@ -97,6 +102,11 @@ def verify(apk, profile, aapt2, apkanalyzer):
     elif profile == 'Full':
         assert all('android' in c and len(c) > 4 for c in configs), configs
         assert SYSTEM <= strings, 'Full lost system hook implementations'
+    elif profile == 'Balanced':
+        assert all(c == BALANCED for c in configs), configs
+        assert not SYSTEM.intersection(strings), 'Balanced includes system hook implementations'
+        assert 'com.samsung.knox.securefolder.provisioning.setup.viewmodel.WelcomeViewModel' in strings
+        assert 'isCompromisedDevice' in strings
     else:
         assert all(c == WA for c in configs), configs
         forbidden = {'com.android.server.pm.AppsFilterBase', 'shouldFilterApplication',
@@ -114,7 +124,7 @@ def verify(apk, profile, aapt2, apkanalyzer):
 if __name__ == '__main__':
     p = argparse.ArgumentParser()
     p.add_argument('apk', type=pathlib.Path)
-    p.add_argument('profile', choices=['Full', 'Minimal', 'AppOnly'])
+    p.add_argument('profile', choices=['Full', 'Balanced', 'Minimal', 'AppOnly'])
     p.add_argument('--aapt2', required=True)
     p.add_argument('--apkanalyzer', required=True)
     a = p.parse_args()

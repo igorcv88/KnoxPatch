@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Balanced overrides every main qualifier: Minimal scopes + Secure Folder. -->
+<resources>
+    <string-array name="scope">
+        <item>com.samsung.android.kmxservice</item>
+        <item>com.osp.app.signin</item>
+        <item>com.samsung.android.app.sharelive</item>
+        <item>com.sec.android.app.shealth</item>
+        <item>com.samsung.knox.securefolder</item>
+    </string-array>
+</resources>

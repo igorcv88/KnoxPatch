@@ -18,6 +18,8 @@
 
 package io.mesalabs.knoxpatch
 
+import android.os.Build
+
 import com.highcapable.yukihookapi.YukiHookAPI.encase
 import com.highcapable.yukihookapi.annotation.xposed.InjectYukiHookWithXposed
 import com.highcapable.yukihookapi.hook.factory.configs
@@ -30,6 +32,7 @@ import io.mesalabs.knoxpatch.hooks.PropSpoofHooks
 import io.mesalabs.knoxpatch.hooks.RootDetectionHooks
 import io.mesalabs.knoxpatch.hooks.SAKDisableHooks
 import io.mesalabs.knoxpatch.hooks.SamsungKeystoreHooks
+import io.mesalabs.knoxpatch.hooks.SecureFolderHooks
 import io.mesalabs.knoxpatch.hooks.SystemHooks
 import io.mesalabs.knoxpatch.utils.BuildUtils
 import io.mesalabs.knoxpatch.utils.Constants
@@ -80,19 +83,26 @@ object MainHook : IYukiHookXposedInit {
             }
         }
 
-        // A build-time profile, independent of the Samsung library flavor.
-        // Full must retain the traditional dispatcher on One UI 9 as well.
-        if (BuildConfig.MINIMAL_PROFILE) {
+        // App-only profiles: Minimal's four scopes, optionally adding Secure
+        // Folder in Balanced. Full retains its historical system dispatcher.
+        if (BuildConfig.MINIMAL_PROFILE || BuildConfig.BALANCED_PROFILE) {
             if (sepVersion < Constants.ONEUI_9_0) {
-                YLog.error(msg = "$TAG: Minimal requires One UI 9; use Full on older devices.")
+                YLog.error(msg = "$TAG: Minimal and Balanced require One UI 9; use Full on older devices.")
                 return@encase
             }
-            YLog.debug(msg = "$TAG: onHook: One UI 9 minimal app-only compatibility profile.")
+            if (BuildConfig.BALANCED_PROFILE && Build.VERSION.SDK_INT != 37) {
+                YLog.error(msg = "$TAG: Balanced Secure Folder support requires Android 17 DZIF.")
+                return@encase
+            }
+            YLog.debug(msg = "$TAG: onHook: One UI 9 app-only profile, balanced=${BuildConfig.BALANCED_PROFILE}.")
             loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, KnoxMatrixHooks)
             loadApp(Constants.KNOX_MATRIX_SERVICE_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.SAMSUNG_ACCOUNT_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.QUICK_SHARE_PACKAGE_NAME, SamsungKeystoreHooks)
             loadApp(Constants.SAMSUNG_HEALTH_PACKAGE_NAME, KnoxSDKHooks)
+            if (BuildConfig.BALANCED_PROFILE) {
+                loadApp(Constants.SECURE_FOLDER_PACKAGE_NAME, SecureFolderHooks)
+            }
             return@encase
         }
 
